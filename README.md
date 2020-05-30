@@ -19,7 +19,7 @@ poetry install
 
 ## How to use
 
-After configured propery,
+After configured properly,
 
 1. Activate virtual environment
 2. Let the program eat template file written in [TOML](https://github.com/toml-lang/toml).
