@@ -42,7 +42,7 @@ class BacklogProject(BaseAPI):
     def by_config(cls, path=None):
         if path is None:
             path = Path(__file__).resolve().parent.joinpath("backlog_template.toml")
-        config = toml.load(open(path))
+        config = toml.load(path)
         b = config["backlog_template"]
         return cls(b["API_KEY"], b["SPACE_DOMAIN"], b["PROJECT"])
 
@@ -158,7 +158,7 @@ if __name__ == "__main__":
     parser = ArgumentParser("Register affliated issues to Backlog project.")
     parser.add_argument("path_to_template", help="Path to template file (toml).")
     args = parser.parse_args()
-    template = toml.load(open(args.path_to_template))
+    template = toml.load(args.path_to_template)
 
     # confirmation of variable replacement
     if "repl" in template:
