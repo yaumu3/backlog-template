@@ -26,13 +26,18 @@ class BacklogProject(BaseAPI):
     https://developer.nulab.com/ja/docs/backlog/#backlog-api-とは
     """
 
-    def __init__(self, api_key, space_domain, project):
+    def __init__(self, api_key, space_domain, project_key):
         def index(response, key="name", value="id"):
             return {d[key]: d[value] for d in response.json()}
 
         self.api_key = api_key
         self.base_url = "https://" + space_domain + "/api/v2/"
-        self.project_id = index(self.get_prop("projects"))[project]
+        logger.info(
+            "Fetching data from {} (PROJECT_KEY={}).".format(space_domain, project_key)
+        )
+        self.project_id = index(self.get_prop("projects"), key="projectKey")[
+            project_key
+        ]
         self.priorities = index(self.get_prop("priorities"))
         self.pj_issue_types = index(self.get_pj_prop("issueTypes"))
         self.pj_versions = index(self.get_pj_prop("versions"))
@@ -44,7 +49,7 @@ class BacklogProject(BaseAPI):
             path = Path(__file__).resolve().parent.joinpath("backlog_template.toml")
         config = toml.load(path)
         b = config["backlog_template"]
-        return cls(b["API_KEY"], b["SPACE_DOMAIN"], b["PROJECT"])
+        return cls(b["API_KEY"], b["SPACE_DOMAIN"], b["PROJECT_KEY"])
 
     def get_prop(self, property_name):
         return self.get(
