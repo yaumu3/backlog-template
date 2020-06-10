@@ -1,10 +1,10 @@
 # backlog-template
 
-Python CLI tool for posting template issues to Backlog project.
+Python CLI tool to post routine issues to Backlog project.
 
 ![demo](demo.gif)
 
-## Requirements
+## Prerequisites
 
 - Python 3.8 or later
 - Poetry 1.0.0 or later (dependency manager)
@@ -19,13 +19,12 @@ poetry install
 
 ## How to use
 
-After configured properly,
+After [configured](#configurations),
 
-1. Activate virtual environment
-2. Let the program eat template file written in [TOML](https://github.com/toml-lang/toml).
+1. If the venv is not activated, execute `poetry shell`.
+2. Let the program eat a [template file](#template) written in [TOML](https://github.com/toml-lang/toml).
 
 ```sh
-poetry shell
 python backlog_template.py templates/template.toml
 ```
 
@@ -33,26 +32,42 @@ python backlog_template.py templates/template.toml
 
 ### Environment variables (required)
 
-Create `backlog_template.toml` to the same directory. All environment variables are stored in this TOML file.
+In the git-cloned directory, create `backlog_template.toml`. All environment variables are stored in this TOML file.
 
-These values are required.
+Values for these keys are required.
 
-- `SPACE_DOMAIN`: Backlog domain (ex: example.backlog.com)
+- `SPACE_DOMAIN`: Backlog domain
 - `API_KEY`: Backlog API key (cf. [Backlog Help Center - API Settings](https://support.backlog.com/hc/en-us/articles/115015420567-API-Settings))
-- `PROJECT`: Backlog project name
+- `PROJECT_KEY`: Backlog Project key
 
-#### Example of `backlog_tempalte.toml`
+### Example of `backlog_tempalte.toml`
 
 ```toml
 [backlog_template]
-SPACE_DOMAIN = "your_space_name.backlog.com"
+SPACE_DOMAIN = "your_space.backlog.com"
 API_KEY = "0123456789yOuRaPiKeY9876543210"
-PROJECT = "YOUR_PROJECT"
+PROJECT_KEY = "YOUR_PROJECT_KEY"
 ```
 
-### Template
+## Template
 
-Strings in curly braces will be replaced upon the post by the dictionary defined in `[repl]`.
+This tool parses a TOML file that describes issues then post issues to the designated project. The TOML file is consisted of following tables.
+
+### Config
+
+In `[config]` table, you can define following constants.
+
+#### Base date time
+
+When you want to express some date and time (i.e. dueDate) by [Time-delta table](#time-delta-table), set reference date and time formatted in [RFC 3339](https://tools.ietf.org/html/rfc3339) as `basedate` in `[config]`.
+
+#### Replacable strings
+
+Strings in curly braces will be replaced upon the post by the table `[config.repl]`.
+
+### Issues
+
+Enumerate follwing keys in table `[[issues]]`. The table can be followed by multiple child issues as `[[issues.children]]` tables.
 
 #### Mandatory keys
 
@@ -65,38 +80,79 @@ Strings in curly braces will be replaced upon the post by the dictionary defined
 - description
 - milestone
 - version
-- dueDate (must be formatted as `yyyy-MM-dd`)
+- dueDate ([RFC 3339](https://tools.ietf.org/html/rfc3339) or [Time-delta table](#time-delta-table))
 - assignee
 
-#### Example of template
+#### Time-delta table
+
+Date and time can be expressed as difference from [`basedate`](#base-date-time). Keys are as same as [timedelta](https://docs.python.org/3/library/datetime.html#datetime.timedelta) Object's keyword arguments are. So, these keys are accepted.
+
+- weeks
+- days
+- hours
+- minutes
+- seconds
+- milliseconds
+- microseconds
+
+3 days *before* the `basedate` is expressed as follows. Note that, it is a minus value saying *before*.
 
 ```toml
-[repl]
-SUMMARY = "a issue"
-GOAL = "a goal"
-CHILD_DUE_DATE = "2025-01-01"
+dueDate = {days = -3}
+```
 
-[issue]
-summary = "{SUMMARY}"
+### Example of template
+
+```toml
+[config]
+basedate = 2020-01-01T00:00:00Z
+
+[config.repl]
+SUMMARY1 = "a issue"
+SUMMARY2 = "another issue"
+GOAL = "a goal"
+
+[[issues]]
+summary = "{SUMMARY1}"
+issueType = "Bug"
+description = "## TL;DR\n\nThis task must be done to achiveve {GOAL}."
+milestone = "1.0.0"
+priority = "High"
+dueDate = 2020-02-02T00:00:00Z
+assignee = "John Smith"
+
+[[issues.children]]
+summary = "a child issue of {SUMMARY1}"
+issueType = "Task"
+description = "## a child issue of {SUMMAR1}\nThis issue is essential to achieve {GOAL}."
+version = "1.0.0"
+milestone = "1.0.0"
+priority = "High"
+dueDate = {days = -3}
+assignee = "John Smith"
+
+[[issues.children]]
+summary = "another child issue of {SUMMARY1}"
+issueType = "Task"
+description = "## another child issue of {SUMMARY1}\nThis issue is really important to achieve {GOAL}."
+priority = "Low"
+dueDate = 2020-02-02T00:00:00Z
+
+[[issues]]
+summary = "{SUMMARY2}"
 issueType = "Bug"
 description = "## TL;DR\n\nThis task must be done to achiveve {GOAL}."
 milestone = "1.0.0"
 priority = "High"
 assignee = "John Smith"
 
-[[issue.children]]
-summary = "a child issue of {SUMMARY}"
+[[issues.children]]
+summary = "a child issue of {SUMMARY2}"
 issueType = "Task"
-description = "## a child issue of {SUMMARY}\nThis issue is essential to achieve {GOAL}."
+description = "## a child issue of {SUMMARY2}\nThis issue is essential to achieve {GOAL}."
 version = "1.0.0"
 milestone = "1.0.0"
 priority = "High"
-dueDate = "{CHILD_DUE_DATE}"
+dueDate = {weeks = -1}
 assignee = "John Smith"
-
-[[issue.children]]
-summary = "another child issue of {SUMMARY}"
-issueType = "Task"
-description = "## another child issue of {SUMMARY}\nThis issue is really important to achieve {GOAL}."
-priority = "Low"
 ```

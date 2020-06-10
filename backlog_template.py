@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging import INFO, basicConfig, getLogger
 from pathlib import Path
 
@@ -25,6 +25,18 @@ class BacklogProject(BaseAPI):
     Backlog API (V2)
     https://developer.nulab.com/ja/docs/backlog/#backlog-api-とは
     """
+
+    mandatory_keys = ("summary", "issueType", "priority")
+
+    substituted_keys = {
+        "priority": "priorities",
+        "issueType": "pj_issue_types",
+        "version": "pj_versions",
+        "milestone": "pj_versions",
+        "assignee": "pj_users",
+    }
+
+    date_keys = ("dueDate",)
 
     def __init__(self, api_key, space_domain, project_key):
         def index(response, key="name", value="id"):
@@ -62,117 +74,110 @@ class BacklogProject(BaseAPI):
             params={"apiKey": self.api_key},
         )
 
-    def post_issue(self, **kwargs):
+    def post_issue(self, issue):
+        dates = {k: issue[k].strftime("%Y-%m-%d") for k in self.date_keys if k in issue}
         return self.post(
             end_point=self.base_url + "issues",
             data={
                 "projectId": self.project_id,
-                "summary": kwargs["summary"],
-                "issueTypeId": kwargs["issueTypeId"],
-                "priorityId": kwargs["priorityId"],
-                "parentIssueId": kwargs.get("parentIssueId"),
-                "description": kwargs.get("description"),
-                "dueDate": kwargs.get("dueDate"),
-                "versionId[]": kwargs.get("versionId"),
-                "milestoneId[]": kwargs.get("milestoneId"),
-                "assigneeId": kwargs.get("assigneeId"),
+                "summary": issue["summary"],
+                "issueTypeId": self.pj_issue_types[issue["issueType"]],
+                "priorityId": self.priorities[issue["priority"]],
+                "parentIssueId": issue.get("parentIssueId"),
+                "description": issue.get("description"),
+                "dueDate": dates.get("dueDate"),
+                "versionId[]": self.pj_versions.get(issue.get("version")),
+                "milestoneId[]": self.pj_versions.get(issue.get("milestone")),
+                "assigneeId": self.pj_users.get(issue.get("assignee")),
             },
             params={"apiKey": self.api_key},
         )
 
-    def post_issue_by_template(self, template):
-        return self.post_issue(
-            summary=template["summary"],
-            issueTypeId=self.pj_issue_types[template["issueType"]],
-            priorityId=self.priorities[template["priority"]],
-            parentIssueId=template.get("parentIssueId"),
-            description=template.get("description"),
-            dueDate=template.get("dueDate"),
-            versionId=self.pj_versions.get(template.get("version")),
-            milestoneId=self.pj_versions.get(template.get("milestone")),
-            assigneeId=self.pj_users.get(template.get("assignee")),
-        )
+    def post_affiliated_issues(self, template):
+        def convert_date_by_delta(d):
+            for k in self.date_keys:
+                if k not in d or isinstance(d[k], datetime):
+                    continue
+                elif isinstance(d[k], dict):
+                    d[k] = template["config"]["basedate"] + timedelta(**d[k])
+                else:
+                    raise ValueError(f"value of {k} must be datetime or dict")
+            return d
 
-    def post_affiliated_issues_by_template(self, template):
-        def replace(dic):
-            return {k: v.format(**repl) for k, v in dic.items()}
+        def replace_curly_braces(d):
+            if "repl" not in template.get("config"):
+                return d
+            repl = template["config"]["repl"]
+            replaced = {}
+            for k, v in d.items():
+                if isinstance(d[k], datetime):
+                    replaced[k] = v
+                else:
+                    replaced[k] = v.format(**repl)
+            return replaced
 
-        repl = template.pop("repl", {})
-        parent = template["issue"]
-        children = parent.pop("children", [])
-        # replace by repl(dict)
-        parent = replace(parent)
-        children = [replace(child) for child in children]
-        # template validation
-        self._validate_template(parent)
-        [self._validate_template(child) for child in children]
+        for affiliated_issue in template["issues"]:
+            parent = affiliated_issue
+            children = parent.pop("children", [])
 
-        r = self.post_issue_by_template(parent).json()
-        logger.info(
-            "\nPosted an issue -> {} '{}'.".format(r["issueKey"], parent["summary"])
-        )
-        parentIssueId = r["id"]
-        for child in children:
-            # append parentIssueId to child then post
-            child.update({"parentIssueId": parentIssueId})
-            rc = self.post_issue_by_template(child).json()
-            logger.info(
-                "\nPosted a child issue of {} -> {} '{}'.".format(
-                    r["issueKey"], rc["issueKey"], child["summary"]
+            parent = convert_date_by_delta(parent)
+            parent = replace_curly_braces(parent)
+            self._validate_issue(parent)
+            r = self.post_issue(parent).json()
+            logger.info("Posted '{} {}'.".format(r["issueKey"], parent["summary"]))
+            parentIssueId = r["id"]
+
+            children = [convert_date_by_delta(child) for child in children]
+            children = [replace_curly_braces(child) for child in children]
+            [self._validate_issue(child) for child in children]
+            for child in children:
+                child.update({"parentIssueId": parentIssueId})
+                rc = self.post_issue(child).json()
+                logger.info(
+                    "Posted (child issue of {}) '{} {}'.".format(
+                        r["issueKey"], rc["issueKey"], child["summary"]
+                    )
                 )
-            )
 
-    def _validate_template(self, template):
-        # validate if the template contains all mandatory keys
-        mandatory_keys = ("summary", "issueType", "priority")
-        for k in mandatory_keys:
-            assert k in template, "Template is missing a mandatory key '{}'".format(k)
+    def _validate_issue(self, issue):
+        for k in self.mandatory_keys:
+            assert k in issue, "Template is missing a mandatory key '{}'".format(k)
 
-        # validate if KeyError does not occur
-        substitue_keys = {
-            "priority": "priorities",
-            "issueType": "pj_issue_types",
-            "version": "pj_versions",
-            "milestone": "pj_versions",
-            "assignee": "pj_users",
-        }
-        for k, v in substitue_keys.items():
-            if k not in template:
+        for k, v in self.substituted_keys.items():
+            if k not in issue:
                 continue
-            assert template[k] in getattr(
+            assert issue[k] in getattr(
                 self, v
-            ), "'{}' is not a valid key for '{}'".format(template[k], k)
-
-        # validate date format
-        date_keys = ("dueDate",)
-        for k in date_keys:
-            if k not in template:
-                continue
-            try:
-                datetime.strptime(template[k], "%Y-%m-%d")
-            except ValueError:
-                raise ValueError("Incorrect data format, should be yyyy-MM-dd")
+            ), "'{}' is not a valid key for '{}'".format(issue[k], k)
 
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
-    from sys import exit
 
-    basicConfig(level=INFO, format="%(levelname)s %(asctime)s: %(message)s")
+    def do_confirm_exec(template):
+        # confirmation to let user be notified of unintentionally unchanged values
+        if "basedate" in template.get("config"):
+            print("--- Base date-time ---")
+            print("basedate = {}".format(template["config"]["basedate"].isoformat()))
+            print()
+        if "repl" in template.get("config"):
+            print("--- Variables replacement ---")
+            for k, v in template["config"]["repl"].items():
+                print("{} = {}".format(k, v))
+            print()
+        return input("Do you want to proceed? (Y/n): ").lower() == "y"
 
     parser = ArgumentParser("Register affliated issues to Backlog project.")
     parser.add_argument("path_to_template", help="Path to template file (toml).")
+    parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     template = toml.load(args.path_to_template)
 
-    # confirmation of variable replacement
-    if "repl" in template:
-        logger.info("--- Variables in template will be replaced as shown below. ---")
-        for k, v in template["repl"].items():
-            logger.info("{{{}}} = '{}'".format(k, v))
-        if input("Do you want to proceed? (Y/n): ").lower() != "y":
-            logger.info("--- Terminated by user input. ---")
-            exit()
+    if args.verbose:
+        basicConfig(level=INFO, format="%(levelname)s: %(message)s")
 
-    bp = BacklogProject.by_config()
-    bp.post_affiliated_issues_by_template(template)
+    if do_confirm_exec(template):
+        bp = BacklogProject.by_config()
+        bp.post_affiliated_issues(template)
+    else:
+        logger.info("Terminated by user input.")
