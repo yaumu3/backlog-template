@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from logging import INFO, basicConfig, getLogger
 
+import fire
 from keyring import get_password, set_password, delete_password
 import requests
 import toml
@@ -152,35 +153,38 @@ class BacklogProject(BacklogSpace):
             ), "'{}' is not a valid key for '{}'".format(issue[k], k)
 
 
-if __name__ == "__main__":
-    from argparse import ArgumentParser
+class BacklogProjectCLI:
+    def post(self, path_to_template):
+        def prepost_check(template):
+            SPACE_DOMAIN = template["target"].pop("SPACE_DOMAIN")
+            PROJECT_KEY = template["target"].pop("PROJECT_KEY")
+            if "basedate" in template.get("config"):
+                print("--- Base date-time ---")
+                print(
+                    "basedate = {}".format(template["config"]["basedate"].isoformat())
+                )
+                print()
+            if "repl" in template.get("config"):
+                print("--- Variables replacement ---")
+                for k, v in template["config"]["repl"].items():
+                    print("{} = {}".format(k, v))
+                print()
+            return SPACE_DOMAIN, PROJECT_KEY, template
 
-    def do_confirm_exec(template):
-        # confirmation to let user be notified of unintentionally unchanged values
-        if "basedate" in template.get("config"):
-            print("--- Base date-time ---")
-            print("basedate = {}".format(template["config"]["basedate"].isoformat()))
-            print()
-        if "repl" in template.get("config"):
-            print("--- Variables replacement ---")
-            for k, v in template["config"]["repl"].items():
-                print("{} = {}".format(k, v))
-            print()
-        return input("Do you want to proceed? (Y/n): ").lower() == "y"
-
-    parser = ArgumentParser("Register affliated issues to Backlog project.")
-    parser.add_argument("path_to_template", help="Path to template file (toml).")
-    parser.add_argument("-v", "--verbose", action="store_true")
-    args = parser.parse_args()
-
-    if args.verbose:
         basicConfig(level=INFO, format="%(levelname)s: %(message)s")
 
-    template = toml.load(args.path_to_template)
-    SPACE_DOMAIN = template["config"].pop("SPACE_DOMAIN")
-    PROJECT_KEY = template["config"].pop("PROJECT_KEY")
-    if do_confirm_exec(template):
-        bp = BacklogProject(SPACE_DOMAIN, PROJECT_KEY)
-        bp.post_affiliated_issues(template)
-    else:
-        logger.info("Terminated by user input.")
+        SPACE_DOMAIN, PROJECT_KEY, template = prepost_check(toml.load(path_to_template))
+        if is_yes("Do you want to proceed?"):
+            bp = BacklogProject(SPACE_DOMAIN, PROJECT_KEY)
+            bp.post_affiliated_issues(template)
+        else:
+            logger.info("Terminated by user input.")
+        pass
+
+
+def is_yes(prompt):
+    return input(prompt + " (Y/n): ").lower() == "y"
+
+
+if __name__ == "__main__":
+    fire.Fire(BacklogProjectCLI)
