@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
+from getpass import getpass
 from logging import INFO, basicConfig, getLogger
 
 import fire
-from keyring import get_password, set_password, delete_password
 import requests
 import toml
+from keyring import delete_password, get_password, set_password
 
 logger = getLogger(__name__)
 SERVICE_NAME = "backlog-template-API_KEY"
@@ -154,6 +155,20 @@ class BacklogProject(BacklogSpace):
 
 
 class BacklogProjectCLI:
+    def init(self, space_domain):
+        if get_password(SERVICE_NAME, space_domain) is None:
+            set_password(SERVICE_NAME, space_domain, getpass(prompt="API_KEY: "))
+        elif is_yes("Do you want to override an exsiting API_KEY?"):
+            # prevents deleting API_KEY before entering new API_KEY
+            api_key = getpass(prompt="API_KEY: ")
+            delete_password(SERVICE_NAME, space_domain)
+            set_password(SERVICE_NAME, space_domain, api_key)
+
+    def doctor(self, space_domain):
+        bs = BacklogSpace(space_domain)
+        if bs.get_prop("space").status_code == requests.codes.ok:
+            print("Your system is ready to post issues to '{}'".format(space_domain))
+
     def post(self, path_to_template):
         def prepost_check(template):
             SPACE_DOMAIN = template["target"].pop("SPACE_DOMAIN")
