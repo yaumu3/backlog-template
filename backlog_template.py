@@ -20,7 +20,22 @@ class BaseAPI:
         return r
 
 
-class BacklogProject(BaseAPI):
+class BacklogSpace(BaseAPI):
+    def __init__(self, space_domain):
+        self.space_domain = space_domain
+        self.base_url = "https://" + space_domain + "/api/v2/"
+        self.api_key = keyring.get_password(
+            service_name=SERVICE_NAME, username=self.space_domain
+        )
+
+    def get_prop(self, property_name):
+        return self.get(
+            end_point=self.base_url + property_name,
+            params={"apiKey": self.api_key},
+        )
+
+
+class BacklogProject(BacklogSpace):
     """
     Backlog API (V2)
     https://developer.nulab.com/ja/docs/backlog/#backlog-api-とは
@@ -42,8 +57,7 @@ class BacklogProject(BaseAPI):
         def index(response, key="name", value="id"):
             return {d[key]: d[value] for d in response.json()}
 
-        self.space_domain = space_domain
-        self.base_url = "https://" + space_domain + "/api/v2/"
+        super().__init__(space_domain)
         logger.info(
             "Fetching data from {} (PROJECT_KEY={}).".format(space_domain, project_key)
         )
@@ -55,21 +69,10 @@ class BacklogProject(BaseAPI):
         self.pj_versions = index(self.get_pj_prop("versions"))
         self.pj_users = index(self.get_pj_prop("users"))
 
-    def __get_api_key(self):
-        return keyring.get_password(
-            service_name="backlog-template-API_KEY", username=self.space_domain
-        )
-
-    def get_prop(self, property_name):
-        return self.get(
-            end_point=self.base_url + property_name,
-            params={"apiKey": self.__get_api_key()},
-        )
-
     def get_pj_prop(self, property_name):
         return self.get(
             end_point=self.base_url + f"projects/{self.project_id}/{property_name}",
-            params={"apiKey": self.__get_api_key()},
+            params={"apiKey": self.api_key},
         )
 
     def post_issue(self, issue):
@@ -88,7 +91,7 @@ class BacklogProject(BaseAPI):
                 "milestoneId[]": self.pj_versions.get(issue.get("milestone")),
                 "assigneeId": self.pj_users.get(issue.get("assignee")),
             },
-            params={"apiKey": self.__get_api_key()},
+            params={"apiKey": self.api_key},
         )
 
     def post_affiliated_issues(self, template):
