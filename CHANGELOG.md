@@ -11,3 +11,8 @@
 - Support for relative datetime from basedate
 - Project id is now obtained by Project's key
 - TOML load simplified
+
+## 0.3.0
+
+- API key management by keyring module
+- CLI implementation by python-fire module

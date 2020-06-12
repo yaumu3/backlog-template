@@ -19,39 +19,38 @@ poetry install
 
 ## How to use
 
-After [configured](#configurations),
-
-1. If the venv is not activated, execute `poetry shell`.
-2. Let the program eat a [template file](#template) written in [TOML](https://github.com/toml-lang/toml).
+After [configured](#management-of-api-keys), let the tool eat a [template file](#template) written in [TOML](https://github.com/toml-lang/toml) with `post` subcommand.
 
 ```sh
-python backlog_template.py templates/template.toml
+python backlog_template.py post templates/template.toml
 ```
 
-## Configurations
+### Management of API keys
 
-### Environment variables (required)
+Store API key by `managekey` subcommand. API will be stored to macOS Keychain, Windows Credential Locker... by [keyring](https://github.com/jaraco/keyring) module.
 
-In the git-cloned directory, create `backlog_template.toml`. All environment variables are stored in this TOML file.
+```sh
+python backlog_template.py managekey your_space.backlog.com
+```
 
-Values for these keys are required.
+### Check the validity of API key
 
-- `SPACE_DOMAIN`: Backlog domain
-- `API_KEY`: Backlog API key (cf. [Backlog Help Center - API Settings](https://support.backlog.com/hc/en-us/articles/115015420567-API-Settings))
-- `PROJECT_KEY`: Backlog Project key
+You can check the validity of API key by `doctor` subcommand.
 
-### Example of `backlog_tempalte.toml`
-
-```toml
-[backlog_template]
-SPACE_DOMAIN = "your_space.backlog.com"
-API_KEY = "0123456789yOuRaPiKeY9876543210"
-PROJECT_KEY = "YOUR_PROJECT_KEY"
+```sh
+python backlog_template.py doctor your_space.backlog.com
 ```
 
 ## Template
 
 This tool parses a TOML file that describes issues then post issues to the designated project. The TOML file is consisted of following tables.
+
+### Target (Required)
+
+In `[target]` table, you need to specify the target project with following keys.
+
+- `SPACE_DOMAIN`: The domain of backlog project (ex. `your_project.backlog.com`)
+- `PROJECT_KEY`
 
 ### Config
 
@@ -104,6 +103,10 @@ dueDate = {days = -3}
 ### Example of template
 
 ```toml
+[target]
+SPACE_DOMAIN = "your_space.backlog.com"
+PROJECT_KEY = "YOUR_PROJECT"
+
 [config]
 basedate = 2020-01-01T00:00:00Z
 
