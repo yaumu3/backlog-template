@@ -1,4 +1,5 @@
 templates/
+.DS_Store
 
 
 # Created by https://www.gitignore.io/api/venv,python,visualstudiocode
