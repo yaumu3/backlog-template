@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from logging import INFO, basicConfig, getLogger
-from pathlib import Path
 
+import keyring
 import requests
 import toml
 
@@ -38,11 +38,11 @@ class BacklogProject(BaseAPI):
 
     date_keys = ("dueDate",)
 
-    def __init__(self, api_key, space_domain, project_key):
+    def __init__(self, space_domain, project_key):
         def index(response, key="name", value="id"):
             return {d[key]: d[value] for d in response.json()}
 
-        self.api_key = api_key
+        self.space_domain = space_domain
         self.base_url = "https://" + space_domain + "/api/v2/"
         logger.info(
             "Fetching data from {} (PROJECT_KEY={}).".format(space_domain, project_key)
@@ -55,23 +55,21 @@ class BacklogProject(BaseAPI):
         self.pj_versions = index(self.get_pj_prop("versions"))
         self.pj_users = index(self.get_pj_prop("users"))
 
-    @classmethod
-    def by_config(cls, path=None):
-        if path is None:
-            path = Path(__file__).resolve().parent.joinpath("backlog_template.toml")
-        config = toml.load(path)
-        b = config["backlog_template"]
-        return cls(b["API_KEY"], b["SPACE_DOMAIN"], b["PROJECT_KEY"])
+    def __get_api_key(self):
+        return keyring.get_password(
+            service_name="backlog-template-API_KEY", username=self.space_domain
+        )
 
     def get_prop(self, property_name):
         return self.get(
-            end_point=self.base_url + property_name, params={"apiKey": self.api_key},
+            end_point=self.base_url + property_name,
+            params={"apiKey": self.__get_api_key()},
         )
 
     def get_pj_prop(self, property_name):
         return self.get(
             end_point=self.base_url + f"projects/{self.project_id}/{property_name}",
-            params={"apiKey": self.api_key},
+            params={"apiKey": self.__get_api_key()},
         )
 
     def post_issue(self, issue):
@@ -90,7 +88,7 @@ class BacklogProject(BaseAPI):
                 "milestoneId[]": self.pj_versions.get(issue.get("milestone")),
                 "assigneeId": self.pj_users.get(issue.get("assignee")),
             },
-            params={"apiKey": self.api_key},
+            params={"apiKey": self.__get_api_key()},
         )
 
     def post_affiliated_issues(self, template):
@@ -122,14 +120,14 @@ class BacklogProject(BaseAPI):
 
             parent = convert_date_by_delta(parent)
             parent = replace_curly_braces(parent)
-            self._validate_issue(parent)
+            self.__validate_issue(parent)
             r = self.post_issue(parent).json()
             logger.info("Posted '{} {}'.".format(r["issueKey"], parent["summary"]))
             parentIssueId = r["id"]
 
             children = [convert_date_by_delta(child) for child in children]
             children = [replace_curly_braces(child) for child in children]
-            [self._validate_issue(child) for child in children]
+            [self.__validate_issue(child) for child in children]
             for child in children:
                 child.update({"parentIssueId": parentIssueId})
                 rc = self.post_issue(child).json()
@@ -139,7 +137,7 @@ class BacklogProject(BaseAPI):
                     )
                 )
 
-    def _validate_issue(self, issue):
+    def __validate_issue(self, issue):
         for k in self.mandatory_keys:
             assert k in issue, "Template is missing a mandatory key '{}'".format(k)
 
@@ -171,13 +169,15 @@ if __name__ == "__main__":
     parser.add_argument("path_to_template", help="Path to template file (toml).")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
-    template = toml.load(args.path_to_template)
 
     if args.verbose:
         basicConfig(level=INFO, format="%(levelname)s: %(message)s")
 
+    template = toml.load(args.path_to_template)
+    SPACE_DOMAIN = template["config"].pop("SPACE_DOMAIN")
+    PROJECT_KEY = template["config"].pop("PROJECT_KEY")
     if do_confirm_exec(template):
-        bp = BacklogProject.by_config()
+        bp = BacklogProject(SPACE_DOMAIN, PROJECT_KEY)
         bp.post_affiliated_issues(template)
     else:
         logger.info("Terminated by user input.")

@@ -8,6 +8,7 @@ authors = ["yaumu3"]
 python = "^3.8"
 requests = "^2.23.0"
 toml = "^0.10.1"
+keyring = "^21.2.1"
 
 [tool.poetry.dev-dependencies]
 black = "^19.10b0"
