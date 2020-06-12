@@ -104,7 +104,7 @@ class BacklogProject(BacklogSpace):
                 elif isinstance(d[k], dict):
                     d[k] = basedate + timedelta(**d[k])
                 else:
-                    raise ValueError(f"value of {k} must be datetime or dict")
+                    raise ValueError(f"value of key '{k}' must be datetime or dict")
             return d
 
         def replace_curly_braces(d):
@@ -168,11 +168,11 @@ class BacklogProjectCLI:
     def post(self, path_to_template):
         def prepost_check(template):
             target = template.pop("target")
-            SPACE_DOMAIN = target.pop("SPACE_DOMAIN")
-            PROJECT_KEY = target.pop("PROJECT_KEY")
+            space_domain = target.pop("SPACE_DOMAIN")
+            project_key = target.pop("PROJECT_KEY")
             print("[target]")
-            print_kv("SPACE_DOMAIN", SPACE_DOMAIN)
-            print_kv("PROJECT_KEY", PROJECT_KEY, end="\n\n")
+            print_kv("SPACE_DOMAIN", space_domain)
+            print_kv("PROJECT_KEY", project_key, end="\n\n")
             config = template.pop("config", {})
             basedate = config.pop("basedate", None)
             repl = config.pop("repl", {})
@@ -183,15 +183,15 @@ class BacklogProjectCLI:
                 print("[config.repl]")
                 [print_kv(k, v) for k, v in repl.items()]
                 print()
-            return SPACE_DOMAIN, PROJECT_KEY, template, basedate, repl
+            return space_domain, project_key, template, basedate, repl
 
         basicConfig(level=INFO, format="%(levelname)s: %(message)s")
 
-        SPACE_DOMAIN, PROJECT_KEY, affiliated_issues, basedate, repl = prepost_check(
+        space_domain, project_key, affiliated_issues, basedate, repl = prepost_check(
             toml.load(path_to_template)
         )
         if is_yes("Do you want to proceed?"):
-            bp = BacklogProject(SPACE_DOMAIN, PROJECT_KEY)
+            bp = BacklogProject(space_domain, project_key)
             for a_issue in affiliated_issues["issues"]:
                 bp.post_affiliated_issue(a_issue, basedate, repl)
         else:
