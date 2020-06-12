@@ -151,7 +151,7 @@ class BacklogProject(BacklogSpace):
 
 
 class BacklogProjectCLI:
-    def init(self, space_domain):
+    def managekey(self, space_domain):
         if get_password(SERVICE_NAME, space_domain) is None:
             set_password(SERVICE_NAME, space_domain, getpass(prompt="API_KEY: "))
         elif is_yes("Do you want to override an exsiting API_KEY?"):
