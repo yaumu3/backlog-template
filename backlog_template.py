@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta
 from logging import INFO, basicConfig, getLogger
 
-import keyring
+from keyring import get_password, set_password, delete_password
 import requests
 import toml
 
 logger = getLogger(__name__)
+SERVICE_NAME = "backlog-template-API_KEY"
 
 
 class BaseAPI:
@@ -24,14 +25,13 @@ class BacklogSpace(BaseAPI):
     def __init__(self, space_domain):
         self.space_domain = space_domain
         self.base_url = "https://" + space_domain + "/api/v2/"
-        self.api_key = keyring.get_password(
-            service_name=SERVICE_NAME, username=self.space_domain
-        )
+        api_key = get_password(service_name=SERVICE_NAME, username=self.space_domain)
+        assert api_key, "API_KEY for {} is not stored yet.".format(space_domain)
+        self.api_key = api_key
 
     def get_prop(self, property_name):
         return self.get(
-            end_point=self.base_url + property_name,
-            params={"apiKey": self.api_key},
+            end_point=self.base_url + property_name, params={"apiKey": self.api_key},
         )
 
 
