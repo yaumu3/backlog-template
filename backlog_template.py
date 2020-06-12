@@ -96,21 +96,18 @@ class BacklogProject(BacklogSpace):
             params={"apiKey": self.api_key},
         )
 
-    def post_affiliated_issues(self, template):
+    def post_affiliated_issue(self, affiliated_issue, basedate=None, repl={}):
         def convert_date_by_delta(d):
             for k in self.date_keys:
                 if k not in d or isinstance(d[k], datetime):
                     continue
                 elif isinstance(d[k], dict):
-                    d[k] = template["config"]["basedate"] + timedelta(**d[k])
+                    d[k] = basedate + timedelta(**d[k])
                 else:
                     raise ValueError(f"value of {k} must be datetime or dict")
             return d
 
         def replace_curly_braces(d):
-            if "repl" not in template.get("config"):
-                return d
-            repl = template["config"]["repl"]
             replaced = {}
             for k, v in d.items():
                 if isinstance(d[k], datetime):
@@ -119,28 +116,27 @@ class BacklogProject(BacklogSpace):
                     replaced[k] = v.format(**repl)
             return replaced
 
-        for affiliated_issue in template["issues"]:
-            parent = affiliated_issue
-            children = parent.pop("children", [])
+        parent = affiliated_issue
+        children = parent.pop("children", [])
 
-            parent = convert_date_by_delta(parent)
-            parent = replace_curly_braces(parent)
-            self.__validate_issue(parent)
-            r = self.post_issue(parent).json()
-            logger.info("Posted '{} {}'.".format(r["issueKey"], parent["summary"]))
-            parentIssueId = r["id"]
+        parent = convert_date_by_delta(parent)
+        parent = replace_curly_braces(parent)
+        self.__validate_issue(parent)
+        r = self.post_issue(parent).json()
+        logger.info("Posted '{} {}'.".format(r["issueKey"], parent["summary"]))
+        parentIssueId = r["id"]
 
-            children = [convert_date_by_delta(child) for child in children]
-            children = [replace_curly_braces(child) for child in children]
-            [self.__validate_issue(child) for child in children]
-            for child in children:
-                child.update({"parentIssueId": parentIssueId})
-                rc = self.post_issue(child).json()
-                logger.info(
-                    "Posted (child issue of {}) '{} {}'.".format(
-                        r["issueKey"], rc["issueKey"], child["summary"]
-                    )
+        children = [convert_date_by_delta(child) for child in children]
+        children = [replace_curly_braces(child) for child in children]
+        [self.__validate_issue(child) for child in children]
+        for child in children:
+            child.update({"parentIssueId": parentIssueId})
+            rc = self.post_issue(child).json()
+            logger.info(
+                "Posted (child issue of {}) '{} {}'.".format(
+                    r["issueKey"], rc["issueKey"], child["summary"]
                 )
+            )
 
     def __validate_issue(self, issue):
         for k in self.mandatory_keys:
@@ -171,34 +167,43 @@ class BacklogProjectCLI:
 
     def post(self, path_to_template):
         def prepost_check(template):
-            SPACE_DOMAIN = template["target"].pop("SPACE_DOMAIN")
-            PROJECT_KEY = template["target"].pop("PROJECT_KEY")
-            if "basedate" in template.get("config"):
-                print("--- Base date-time ---")
-                print(
-                    "basedate = {}".format(template["config"]["basedate"].isoformat())
-                )
+            target = template.pop("target")
+            SPACE_DOMAIN = target.pop("SPACE_DOMAIN")
+            PROJECT_KEY = target.pop("PROJECT_KEY")
+            print("[target]")
+            print_kv("SPACE_DOMAIN", SPACE_DOMAIN)
+            print_kv("PROJECT_KEY", PROJECT_KEY, end="\n\n")
+            config = template.pop("config", {})
+            basedate = config.pop("basedate", None)
+            repl = config.pop("repl", {})
+            if basedate:
+                print("[config]")
+                print_kv("basedate", basedate.isoformat(), end="\n\n")
+            if repl:
+                print("[config.repl]")
+                [print_kv(k, v) for k, v in repl.items()]
                 print()
-            if "repl" in template.get("config"):
-                print("--- Variables replacement ---")
-                for k, v in template["config"]["repl"].items():
-                    print("{} = {}".format(k, v))
-                print()
-            return SPACE_DOMAIN, PROJECT_KEY, template
+            return SPACE_DOMAIN, PROJECT_KEY, template, basedate, repl
 
         basicConfig(level=INFO, format="%(levelname)s: %(message)s")
 
-        SPACE_DOMAIN, PROJECT_KEY, template = prepost_check(toml.load(path_to_template))
+        SPACE_DOMAIN, PROJECT_KEY, affiliated_issues, basedate, repl = prepost_check(
+            toml.load(path_to_template)
+        )
         if is_yes("Do you want to proceed?"):
             bp = BacklogProject(SPACE_DOMAIN, PROJECT_KEY)
-            bp.post_affiliated_issues(template)
+            for a_issue in affiliated_issues["issues"]:
+                bp.post_affiliated_issue(a_issue, basedate, repl)
         else:
             logger.info("Terminated by user input.")
-        pass
 
 
 def is_yes(prompt):
     return input(prompt + " (Y/n): ").lower() == "y"
+
+
+def print_kv(k, v, **kwargs):
+    print('''{} = "{}"'''.format(k, v), **kwargs)
 
 
 if __name__ == "__main__":
