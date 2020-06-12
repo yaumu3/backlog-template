@@ -1,8 +1,4 @@
-### backlog-template ###
 templates/
-# DO NOT REMOVE this entry from gitignore.
-# This toml contains API key.
-backlog_template.toml
 
 
 # Created by https://www.gitignore.io/api/venv,python,visualstudiocode

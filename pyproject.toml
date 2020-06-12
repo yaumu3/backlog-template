@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "backlog-template"
-version = "0.3.0"
+version = "0.3.1"
 description = "Post template issues to backlog"
-authors = ["yaumu3"]
+authors = ["yaumu3 <yumu@me.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.8"

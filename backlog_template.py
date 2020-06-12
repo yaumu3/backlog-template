@@ -162,8 +162,10 @@ class BacklogProjectCLI:
 
     def doctor(self, space_domain):
         bs = BacklogSpace(space_domain)
-        if bs.get_prop("space").status_code == requests.codes.ok:
+        if "application/json" in bs.get_prop("space").headers["content-type"]:
             print("Your system is ready to post issues to '{}'".format(space_domain))
+        else:
+            print("Stored API_KEY for '{}' is wrong.".format(space_domain))
 
     def post(self, path_to_template):
         def prepost_check(template):
